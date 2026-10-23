@@ -10,6 +10,9 @@ workspace.
 
 ## [Unreleased]
 
+### Changed
+- Orchard and Ironwood proof bytes are read in bulk instead of one byte at a time.
+
 ## [0.31.0] - 2026-10-21
 
 ### Added
