@@ -13,6 +13,11 @@ workspace.
 ### Changed
 - Orchard and Ironwood proof bytes are read in bulk instead of one byte at a time.
 
+### Fixed
+- Reduced per-byte writer overhead when serializing Orchard and Ironwood
+  proofs, without changing their encoding or length limits
+  ([#3194](https://github.com/zcash/librustzcash/issues/3194)).
+
 ## [0.31.0] - 2026-10-21
 
 ### Added
