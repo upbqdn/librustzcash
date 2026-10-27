@@ -37,7 +37,7 @@ categories = ["cryptography::cryptocurrencies"]
 [workspace.dependencies]
 # Intra-workspace dependencies
 eip681 = { version = "0.1.0", path = "components/eip681" }
-equihash = { version = "=0.3.0", default-features = false }
+equihash = { version = "0.3.1", default-features = false }
 f4jumble = { version = "0.1.2", path = "components/f4jumble", default-features = false }
 zcash_address = { version = "0.14", path = "components/zcash_address", default-features = false }
 zcash_client_backend = { version = "0.25", path = "zcash_client_backend", default-features = false }
