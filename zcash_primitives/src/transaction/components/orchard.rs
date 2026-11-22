@@ -1,13 +1,13 @@
 //! Functions for parsing & serialization of Orchard transaction components.
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use corez::io::{self, Read, Write};
+use corez::io::{self, Cursor, Read, Write};
 
 use nonempty::NonEmpty;
 
 use core::mem::size_of;
 use orchard::{
-    Action, Anchor, ValuePool,
+    Action, Anchor, EncodedAction, EncodedActionError, ValuePool,
     bundle::{Authorization, Authorized, BundleVersion, Flags},
     note::{ExtractedNoteCommitment, Nullifier, TransmittedNoteCiphertext},
     note_encryption::{ENC_CIPHERTEXT_SIZE, NoteBytesData},
@@ -100,12 +100,91 @@ impl MapAuth<Authorized, Authorized> for () {
     }
 }
 
+// On malformed or truncated input, replay the already-read action bytes with the ordinary
+// decoder. This preserves errors from an earlier point or field before a later read failure.
+fn first_action_error(actions: &[[u8; ACTION_SIZE]], partial: &[u8]) -> Option<io::Error> {
+    for bytes in actions {
+        if let Err(error) = read_action_without_auth(bytes.as_slice()) {
+            return Some(error);
+        }
+    }
+    match read_action_without_auth(partial) {
+        Err(error) if error.kind() != io::ErrorKind::UnexpectedEof => Some(error),
+        _ => None,
+    }
+}
+
+fn read_encoded_action(bytes: &[u8; ACTION_SIZE]) -> io::Result<EncodedAction<()>> {
+    let mut reader = Cursor::new(bytes.as_slice());
+    let mut cv_net = [0; VALUE_COMMITMENT_BYTE_SIZE];
+    reader.read_exact(&mut cv_net)?;
+    let nf = read_nullifier(&mut reader)?;
+    let rk = read_verification_key(&mut reader)?;
+    let cmx = read_cmx(&mut reader)?;
+    let encrypted_note = read_note_ciphertext(&mut reader)?;
+    Ok(EncodedAction {
+        cv_net,
+        nf,
+        rk,
+        cmx,
+        encrypted_note,
+        authorization: (),
+    })
+}
+
+fn read_actions_without_auth<R: Read>(mut reader: R) -> io::Result<Vec<Action<()>>> {
+    let count: usize = CompactSize::read_t(&mut reader)?;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if count == 1 {
+        return Ok(alloc::vec![read_action_without_auth(&mut reader)?]);
+    }
+    let mut bytes = Vec::<[u8; ACTION_SIZE]>::new();
+    for _ in 0..count {
+        let mut action = [0; ACTION_SIZE];
+        let mut filled = 0;
+        while filled < ACTION_SIZE {
+            match reader.read(&mut action[filled..]) {
+                Ok(0) => {
+                    let error = io::Error::from(io::ErrorKind::UnexpectedEof);
+                    return Err(first_action_error(&bytes, &action[..filled]).unwrap_or(error));
+                }
+                Ok(n) => filled += n,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => {
+                    return Err(first_action_error(&bytes, &action[..filled]).unwrap_or(error));
+                }
+            }
+        }
+        bytes.push(action);
+    }
+    let mut parts = Vec::with_capacity(bytes.len());
+    for action in &bytes {
+        match read_encoded_action(action) {
+            Ok(part) => parts.push(part),
+            Err(error) => return Err(first_action_error(&bytes, &[]).unwrap_or(error)),
+        }
+    }
+    Action::from_encoded_parts(parts)
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| match error {
+            EncodedActionError::InvalidCv => io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid Pallas point for value commitment",
+            ),
+            EncodedActionError::InvalidAction(error) => {
+                io::Error::new(io::ErrorKind::InvalidData, error)
+            }
+        })
+}
+
 fn read_bundle<R: Read>(
     mut reader: R,
     bundle_version: Option<BundleVersion>,
 ) -> io::Result<Option<orchard::Bundle<Authorized, ZatBalance>>> {
-    #[allow(clippy::redundant_closure)]
-    let actions_without_auth = Vector::read(&mut reader, |r| read_action_without_auth(r))?;
+    let actions_without_auth = read_actions_without_auth(&mut reader)?;
     if actions_without_auth.is_empty() {
         Ok(None)
     } else {
@@ -595,3 +674,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "orchard/batch_tests.rs"]
+mod batch_tests;

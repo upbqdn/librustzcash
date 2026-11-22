@@ -75,6 +75,8 @@ workspace = true
 features = ["pre-zip-212"]
 
 [dev-dependencies]
+group.workspace = true
+pasta_curves.workspace = true
 bls12_381.workspace = true
 criterion.workspace = true
 incrementalmerkletree = { workspace = true, features = ["legacy-api", "test-dependencies"] }

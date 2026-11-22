@@ -10,6 +10,10 @@ workspace.
 
 ## [Unreleased]
 
+### Changed
+- Orchard and Ironwood transaction parsing decompresses action value commitments
+  and ephemeral keys together while preserving the first invalid-field error.
+
 ## [0.31.1] - 2026-11-12
 
 ### Changed
