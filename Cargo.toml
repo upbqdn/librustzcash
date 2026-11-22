@@ -204,6 +204,10 @@ tag = false
 publish = false
 push = false
 
+[patch.crates-io]
+orchard = { git = "https://github.com/upbqdn/orchard", rev = "af70e21c76a3b0935bbdd5ad4c6167c39dd7bb34" }
+pasta_curves = { git = "https://github.com/upbqdn/pasta_curves", rev = "67bc6d16009a3d24f638aea515db80249970caa5" }
+
 [profile.release]
 lto = true
 panic = 'abort'

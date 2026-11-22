@@ -102,15 +102,24 @@ impl MapAuth<Authorized, Authorized> for () {
 
 // On malformed or truncated input, replay the already-read action bytes with the ordinary
 // decoder. This preserves errors from an earlier point or field before a later read failure.
-fn first_action_error(actions: &[[u8; ACTION_SIZE]], partial: &[u8]) -> Option<io::Error> {
+fn first_action_error(
+    actions: &[[u8; ACTION_SIZE]],
+    partial: &[u8],
+    read_error: io::Error,
+) -> io::Error {
     for bytes in actions {
         if let Err(error) = read_action_without_auth(bytes.as_slice()) {
-            return Some(error);
+            return error;
         }
     }
     match read_action_without_auth(partial) {
-        Err(error) if error.kind() != io::ErrorKind::UnexpectedEof => Some(error),
-        _ => None,
+        Err(error)
+            if error.kind() != io::ErrorKind::UnexpectedEof
+                || read_error.kind() == io::ErrorKind::UnexpectedEof =>
+        {
+            error
+        }
+        _ => read_error,
     }
 }
 
@@ -137,7 +146,7 @@ fn decode_action_chunk(bytes: &[[u8; ACTION_SIZE]]) -> io::Result<Vec<Action<()>
     for action in bytes {
         match read_encoded_action(action) {
             Ok(part) => parts.push(part),
-            Err(error) => return Err(first_action_error(bytes, &[]).unwrap_or(error)),
+            Err(error) => return Err(first_action_error(bytes, &[], error)),
         }
     }
     Action::from_encoded_parts(parts).map_err(|error| match error {
@@ -167,12 +176,12 @@ fn read_actions_without_auth<R: Read>(mut reader: R) -> io::Result<Vec<Action<()
             match reader.read(&mut action[filled..]) {
                 Ok(0) => {
                     let error = io::Error::from(io::ErrorKind::UnexpectedEof);
-                    return Err(first_action_error(&pending, &action[..filled]).unwrap_or(error));
+                    return Err(first_action_error(&pending, &action[..filled], error));
                 }
                 Ok(n) => filled += n,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) => {
-                    return Err(first_action_error(&pending, &action[..filled]).unwrap_or(error));
+                    return Err(first_action_error(&pending, &action[..filled], error));
                 }
             }
         }
