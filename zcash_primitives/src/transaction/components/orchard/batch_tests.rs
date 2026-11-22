@@ -94,6 +94,19 @@ fn batch_preserves_validity_first_error_and_truncated_input_precedence() {
     rk_before_cmx[96..128].fill(0xff);
     check(&wire(&[rk_before_cmx, valid]));
 
+    // Exercise a full eight-point chunk followed by another chunk.
+    let mut actions = [valid; 9];
+    check(&wire(&actions));
+    actions[4] = epk;
+    actions[5] = cv;
+    check(&wire(&actions));
+    actions[4] = valid;
+    actions[8] = identity_epk;
+    check(&wire(&actions));
+    let mut truncated = wire(&actions);
+    truncated.truncate(1 + 8 * ACTION_SIZE + 100);
+    check(&truncated);
+
     for first in [valid, cv, epk, identity_rk] {
         for bytes_of_second in [0, 16, 32, 65, 96, 128, 160, 500, ACTION_SIZE - 1] {
             let mut truncated = wire(&[first, valid]);

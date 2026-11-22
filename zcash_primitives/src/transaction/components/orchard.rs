@@ -132,6 +132,23 @@ fn read_encoded_action(bytes: &[u8; ACTION_SIZE]) -> io::Result<EncodedAction<()
     })
 }
 
+fn decode_action_chunk(bytes: &[[u8; ACTION_SIZE]]) -> io::Result<Vec<Action<()>>> {
+    let mut parts = Vec::with_capacity(bytes.len());
+    for action in bytes {
+        match read_encoded_action(action) {
+            Ok(part) => parts.push(part),
+            Err(error) => return Err(first_action_error(bytes, &[]).unwrap_or(error)),
+        }
+    }
+    Action::from_encoded_parts(parts).map_err(|error| match error {
+        EncodedActionError::InvalidCv => io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid Pallas point for value commitment",
+        ),
+        EncodedActionError::InvalidAction(error) => io::Error::new(io::ErrorKind::InvalidData, error),
+    })
+}
+
 fn read_actions_without_auth<R: Read>(mut reader: R) -> io::Result<Vec<Action<()>>> {
     let count: usize = CompactSize::read_t(&mut reader)?;
     if count == 0 {
@@ -140,44 +157,37 @@ fn read_actions_without_auth<R: Read>(mut reader: R) -> io::Result<Vec<Action<()
     if count == 1 {
         return Ok(alloc::vec![read_action_without_auth(&mut reader)?]);
     }
-    let mut bytes = Vec::<[u8; ACTION_SIZE]>::new();
-    for _ in 0..count {
+    // Four actions fill one eight-point decode batch and bound delayed validation of bad input.
+    let mut pending = Vec::<[u8; ACTION_SIZE]>::with_capacity(count.min(4));
+    let mut decoded = Vec::new();
+    for index in 0..count {
         let mut action = [0; ACTION_SIZE];
         let mut filled = 0;
         while filled < ACTION_SIZE {
             match reader.read(&mut action[filled..]) {
                 Ok(0) => {
                     let error = io::Error::from(io::ErrorKind::UnexpectedEof);
-                    return Err(first_action_error(&bytes, &action[..filled]).unwrap_or(error));
+                    return Err(first_action_error(&pending, &action[..filled]).unwrap_or(error));
                 }
                 Ok(n) => filled += n,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) => {
-                    return Err(first_action_error(&bytes, &action[..filled]).unwrap_or(error));
+                    return Err(first_action_error(&pending, &action[..filled]).unwrap_or(error));
                 }
             }
         }
-        bytes.push(action);
-    }
-    let mut parts = Vec::with_capacity(bytes.len());
-    for action in &bytes {
-        match read_encoded_action(action) {
-            Ok(part) => parts.push(part),
-            Err(error) => return Err(first_action_error(&bytes, &[]).unwrap_or(error)),
+        pending.push(action);
+        if pending.len() == 4 || index + 1 == count {
+            let chunk = decode_action_chunk(&pending)?;
+            if decoded.is_empty() {
+                decoded = chunk;
+            } else {
+                decoded.extend(chunk);
+            }
+            pending.clear();
         }
     }
-    Action::from_encoded_parts(parts)
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| match error {
-            EncodedActionError::InvalidCv => io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid Pallas point for value commitment",
-            ),
-            EncodedActionError::InvalidAction(error) => {
-                io::Error::new(io::ErrorKind::InvalidData, error)
-            }
-        })
+    Ok(decoded)
 }
 
 fn read_bundle<R: Read>(
