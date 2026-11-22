@@ -154,7 +154,9 @@ fn decode_action_chunk(bytes: &[[u8; ACTION_SIZE]]) -> io::Result<Vec<Action<()>
             io::ErrorKind::InvalidInput,
             "invalid Pallas point for value commitment",
         ),
-        EncodedActionError::InvalidAction(error) => io::Error::new(io::ErrorKind::InvalidData, error),
+        EncodedActionError::InvalidAction(error) => {
+            io::Error::new(io::ErrorKind::InvalidData, error)
+        }
     })
 }
 

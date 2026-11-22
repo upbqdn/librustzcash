@@ -14,7 +14,8 @@ fn action_bytes() -> [u8; ACTION_SIZE] {
     bytes[64..96].copy_from_slice(&point); // rk
     bytes[96..128].copy_from_slice(&[2; 32]); // cmx
     bytes[128..160].copy_from_slice(&point); // epk
-    read_action_without_auth(bytes.as_slice()).expect("a generated action has valid field encodings");
+    read_action_without_auth(bytes.as_slice())
+        .expect("a generated action has valid field encodings");
     bytes
 }
 
