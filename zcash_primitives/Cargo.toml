@@ -19,9 +19,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-equihash.workspace = true
-zcash_encoding.workspace = true
-zcash_protocol.workspace = true
+# Keep sibling type identities shared with registry consumers when used as a Git patch.
+equihash = { version = "0.3", default-features = false }
+zcash_encoding = { version = "0.5.1", default-features = false }
+zcash_protocol = { version = "0.11", default-features = false }
 zcash_script.workspace = true
 
 # Dependencies exposed in a public API:
@@ -50,7 +51,7 @@ incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
 proptest = { workspace = true, optional = true }
 
 # - Transparent protocol
-transparent.workspace = true
+transparent = { package = "zcash_transparent", version = "0.11", default-features = false }
 
 # - Transparent inputs
 #   - `SecretKey` and `PublicKey` types exposed
@@ -84,10 +85,10 @@ proptest.workspace = true
 assert_matches.workspace = true
 rand = { workspace = true, features = ["sys_rng"] }
 rand_xorshift.workspace = true
-transparent = { workspace = true, features = ["test-dependencies"] }
+transparent = { package = "zcash_transparent", version = "0.11", default-features = false, features = ["test-dependencies"] }
 sapling = { workspace = true, features = ["test-dependencies"] }
 orchard = { workspace = true, features = ["test-dependencies"] }
-zcash_protocol = { workspace = true, features = ["local-consensus", "test-dependencies"] }
+zcash_protocol = { version = "0.11", default-features = false, features = ["local-consensus", "test-dependencies"] }
 zip32.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
